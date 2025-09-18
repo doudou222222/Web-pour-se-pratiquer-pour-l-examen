@@ -1,0 +1,333 @@
+ <!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exercices d'anglais: Simple Present & Present Progressive</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .card { background-color: white; border-radius: 0.75rem; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-3px); }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s, transform 0.2s; }
+        .btn-primary { background-color: #2563eb; color: white; }
+        .btn-primary:hover { background-color: #1d4ed8; transform: translateY(-1px); }
+        .btn-secondary { background-color: #d1d5db; color: #1f2937; }
+        .btn-secondary:hover { background-color: #9ca3af; transform: translateY(-1px); }
+        .input { border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 0.5rem 1rem; width: 100%; transition: border-color 0.2s; }
+        .input:focus { outline: none; border-color: #2563eb; }
+        .loading { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center py-12 px-4 min-h-screen">
+    <div id="loadingIndicator" class="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="card p-6 flex items-center space-x-4">
+            <div class="loading"></div>
+            <p class="text-gray-700">Génération d'exercices en cours...</p>
+        </div>
+    </div>
+    <div class="max-w-4xl w-full">
+        <div class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-gray-800 mb-2">Exercices d'anglais</h1>
+            <p class="text-lg text-gray-600">Entraînez-vous sur le Simple Present et le Present Progressive.</p>
+            <p class="text-sm text-gray-400 mt-2">Votre identifiant utilisateur pour le partage : <span id="userIdDisplay" class="font-mono text-gray-500">Chargement...</span></p>
+        </div>
+
+        <div id="messageBox" class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6 rounded hidden" role="alert">
+            <p id="messageText" class="font-bold"></p>
+        </div>
+
+        <!-- Section Simple Present -->
+        <div class="mb-12">
+            <h2 class="text-3xl font-bold text-gray-700 mb-6 border-b-2 border-blue-400 pb-2">Simple Present</h2>
+            <div id="simplePresentContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Les exercices seront insérés ici par JavaScript -->
+            </div>
+        </div>
+
+        <!-- Section Present Progressive -->
+        <div class="mb-12">
+            <h2 class="text-3xl font-bold text-gray-700 mb-6 border-b-2 border-green-400 pb-2">Present Progressive</h2>
+            <div id="presentProgressiveContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Les exercices seront insérés ici par JavaScript -->
+            </div>
+        </div>
+
+        <!-- Section de génération d'exercices avec l'IA -->
+        <div class="card bg-blue-50">
+            <h2 class="text-2xl font-bold text-blue-700 mb-4">Générer de nouveaux exercices avec l'IA</h2>
+            <div class="text-gray-600 mb-4">
+                <p>Décrivez le type d'exercice que vous voulez. Soyez aussi précis que possible !</p>
+                <p class="text-sm mt-1">Exemple : "Génère 3 phrases pour le simple present avec le verbe 'to study' pour un étudiant qui voyage."</p>
+            </div>
+            <textarea id="aiPrompt" class="input w-full h-24 mb-4" placeholder="Tapez votre demande ici..."></textarea>
+            <div class="flex justify-end">
+                <button id="generateBtn" class="btn btn-primary">Générer et ajouter</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, query, addDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+
+        // Active les logs de débogage de Firebase
+        setLogLevel('debug');
+
+        // Récupération des variables globales fournies par l'environnement
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Initialisation de Firebase
+        let app, db, auth;
+        let userId = null;
+        let isAuthReady = false;
+
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+        // Fonction pour afficher des messages à l'utilisateur
+        function showMessage(text, type = 'info') {
+            messageText.textContent = text;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'border-red-500', 'text-red-700', 'bg-blue-100', 'border-blue-500', 'text-blue-700', 'bg-green-100', 'border-green-500', 'text-green-700');
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
+            } else if (type === 'success') {
+                 messageBox.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
+            } else {
+                 messageBox.classList.add('bg-blue-100', 'border-blue-500', 'text-blue-700');
+            }
+            messageBox.classList.remove('hidden');
+        }
+
+        // Fonction pour cacher les messages
+        function hideMessage() {
+            messageBox.classList.add('hidden');
+        }
+
+        // Fonction pour afficher/cacher l'indicateur de chargement
+        function showLoading() {
+            loadingIndicator.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingIndicator.classList.add('hidden');
+        }
+
+        // Configuration et initialisation de l'application
+        const initFirebase = async () => {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Gérer l'authentification
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    } else {
+                        if (initialAuthToken) {
+                            try {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } catch (e) {
+                                console.error("Erreur lors de la connexion avec le token personnalisé :", e);
+                                await signInAnonymously(auth);
+                            }
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                    userId = auth.currentUser?.uid || 'anonymous-user';
+                    document.getElementById('userIdDisplay').textContent = userId;
+                    isAuthReady = true;
+                    setupRealtimeListeners();
+                });
+            } catch (e) {
+                console.error("Erreur lors de l'initialisation de Firebase :", e);
+                showMessage("Erreur lors du chargement de l'application. Veuillez réessayer.", 'error');
+            }
+        };
+
+        // Configuration des écouteurs de base de données en temps réel
+        const setupRealtimeListeners = () => {
+            if (!isAuthReady) return;
+
+            // Définir le chemin de la collection publique
+            const exercisesPath = `/artifacts/${appId}/public/data/exercises`;
+            const q = query(collection(db, exercisesPath));
+
+            onSnapshot(q, (querySnapshot) => {
+                const exercises = [];
+                querySnapshot.forEach((doc) => {
+                    exercises.push({ id: doc.id, ...doc.data() });
+                });
+                renderExercises(exercises);
+            }, (error) => {
+                console.error("Erreur lors de la récupération des exercices :", error);
+                showMessage("Erreur de connexion à la base de données. Veuillez recharger la page.", 'error');
+            });
+        };
+
+        // Rendu des exercices sur la page
+        const renderExercises = (exercises) => {
+            const simplePresentContainer = document.getElementById('simplePresentContainer');
+            const presentProgressiveContainer = document.getElementById('presentProgressiveContainer');
+
+            simplePresentContainer.innerHTML = '';
+            presentProgressiveContainer.innerHTML = '';
+
+            exercises.forEach(exercise => {
+                const card = createExerciseCard(exercise);
+                if (exercise.tense === 'simple present') {
+                    simplePresentContainer.appendChild(card);
+                } else if (exercise.tense === 'present progressive') {
+                    presentProgressiveContainer.appendChild(card);
+                }
+            });
+        };
+
+        // Création d'une carte d'exercice
+        const createExerciseCard = (exercise) => {
+            const card = document.createElement('div');
+            card.className = 'card flex flex-col space-y-4';
+            card.innerHTML = `
+                <div class="text-sm font-semibold text-gray-500 mb-2">
+                    ${exercise.tense === 'simple present' ? 'Simple Present' : 'Present Progressive'}
+                </div>
+                <div class="flex items-center space-x-2">
+                    <p class="text-lg text-gray-800 flex-1">${exercise.sentence.replace('___', '<input type="text" class="input flex-1 w-24 inline-block text-center" />')}</p>
+                </div>
+                <div class="flex items-center space-x-2 mt-auto">
+                    <button class="btn btn-primary check-btn w-full">Vérifier</button>
+                    <span class="answer-status text-lg font-bold"></span>
+                </div>
+            `;
+            
+            const inputField = card.querySelector('input');
+            const checkBtn = card.querySelector('.check-btn');
+            const statusSpan = card.querySelector('.answer-status');
+
+            checkBtn.addEventListener('click', () => {
+                const userAnswer = inputField.value.trim().toLowerCase();
+                const correctAnswer = exercise.answer.trim().toLowerCase();
+                if (userAnswer === correctAnswer) {
+                    statusSpan.textContent = 'Correct ! ✅';
+                    statusSpan.className = 'answer-status text-lg font-bold text-green-600';
+                } else {
+                    statusSpan.textContent = `Faux. La bonne réponse est "${exercise.answer}".`;
+                    statusSpan.className = 'answer-status text-lg font-bold text-red-600';
+                }
+            });
+
+            return card;
+        };
+
+        // Fonction pour générer des exercices via l'IA
+        const generateExercises = async () => {
+            const prompt = document.getElementById('aiPrompt').value.trim();
+            if (!prompt) {
+                showMessage("Veuillez entrer une description pour générer des exercices.", 'error');
+                return;
+            }
+
+            showLoading();
+            hideMessage();
+
+            try {
+                // Construction du payload pour l'API Gemini
+                const payload = {
+                    contents: [{ parts: [{ text: `Génère des exercices d'anglais en format JSON. La réponse doit contenir un tableau d'objets. Chaque objet doit avoir les propriétés suivantes : "sentence" (une phrase avec '___' pour l'espace à compléter), "answer" (la bonne réponse en un seul mot), "tense" ("simple present" ou "present progressive" en minuscules), et "explanation" (une brève explication en français).
+                    Voici la demande de l'utilisateur : "${prompt}".
+                    Assurez-vous que le format de la réponse est un tableau JSON pur, sans aucun texte supplémentaire.` }] }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "ARRAY",
+                            items: {
+                                type: "OBJECT",
+                                properties: {
+                                    "sentence": { "type": "STRING" },
+                                    "answer": { "type": "STRING" },
+                                    "tense": { "type": "STRING", "enum": ["simple present", "present progressive"] },
+                                    "explanation": { "type": "STRING" }
+                                },
+                                required: ["sentence", "answer", "tense", "explanation"]
+                            }
+                        }
+                    }
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=`;
+                let response = null;
+                const maxRetries = 3;
+                let retryCount = 0;
+
+                while (retryCount < maxRetries) {
+                    try {
+                        response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        if (response.status !== 429) {
+                            break; // Sortir de la boucle si ce n'est pas une erreur de quota
+                        }
+                    } catch (e) {
+                        console.error("Erreur de requête:", e);
+                    }
+                    await new Promise(res => setTimeout(res, 2000 * Math.pow(2, retryCount)));
+                    retryCount++;
+                }
+
+                if (!response || !response.ok) {
+                    throw new Error(`Erreur de l'API: ${response?.statusText || 'Inconnu'}`);
+                }
+
+                const result = await response.json();
+                const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (!jsonText) {
+                    throw new Error("La réponse de l'IA n'est pas au format attendu.");
+                }
+
+                const newExercises = JSON.parse(jsonText);
+                if (!Array.isArray(newExercises)) {
+                    throw new Error("La réponse de l'IA n'est pas un tableau.");
+                }
+
+                // Ajouter les nouveaux exercices à la base de données
+                const exercisesCollection = collection(db, `/artifacts/${appId}/public/data/exercises`);
+                for (const exercise of newExercises) {
+                    await addDoc(exercisesCollection, {
+                        sentence: exercise.sentence,
+                        answer: exercise.answer,
+                        tense: exercise.tense,
+                        explanation: exercise.explanation
+                    });
+                }
+
+                showMessage("Exercices générés et ajoutés avec succès ! La page va se mettre à jour.", 'success');
+
+            } catch (error) {
+                console.error("Erreur lors de la génération des exercices :", error);
+                showMessage(`Erreur: ${error.message || 'Impossible de générer les exercices.'}`, 'error');
+            } finally {
+                hideLoading();
+            }
+        };
+
+        // Ajout des écouteurs d'événements
+        document.getElementById('generateBtn').addEventListener('click', generateExercises);
+
+        // Démarrer l'application
+        window.onload = initFirebase;
+    </script>
+</body>
+</html>
